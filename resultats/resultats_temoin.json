@@ -1,0 +1,156 @@
+{
+  "date": "2026-11-14 00:01",
+  "version_detecteur": 3,
+  "applis": [
+    {
+      "cadre": "Java/Kotlin",
+      "crypto": true,
+      "crypto_appli": true,
+      "modes_appli": [
+        "CBC"
+      ],
+      "transformations": [
+        "AES/CBC/PKCS5Padding [appli]",
+        "AES/CBC/PKCS5Padding [bibliothèque]"
+      ],
+      "constats": [
+        {
+          "regle": "B1",
+          "detail": "IvParameterSpec(tableau constant)",
+          "lieu": "Lcom/android/insecurebankv2/CryptoClass;->aes256decrypt",
+          "origine": "appli"
+        },
+        {
+          "regle": "C1",
+          "detail": "SecretKeySpec(tableau constant)",
+          "lieu": "Lcom/android/insecurebankv2/CryptoClass;->aes256decrypt",
+          "origine": "appli"
+        },
+        {
+          "regle": "B1",
+          "detail": "IvParameterSpec(tableau constant)",
+          "lieu": "Lcom/android/insecurebankv2/CryptoClass;->aes256encrypt",
+          "origine": "appli"
+        },
+        {
+          "regle": "C1",
+          "detail": "SecretKeySpec(tableau constant)",
+          "lieu": "Lcom/android/insecurebankv2/CryptoClass;->aes256encrypt",
+          "origine": "appli"
+        },
+        {
+          "regle": "E1",
+          "detail": "MessageDigest.getInstance(\"MD5\")",
+          "lieu": "Lcom/google/android/gms/ads/internal/util/client/zza;->zzax",
+          "origine": "bibliothèque"
+        },
+        {
+          "regle": "E1",
+          "detail": "MessageDigest.getInstance(\"SHA1\")",
+          "lieu": "Lcom/google/android/gms/iid/InstanceID;->zza",
+          "origine": "bibliothèque"
+        },
+        {
+          "regle": "B1",
+          "detail": "IvParameterSpec(tableau vide (zéros))",
+          "lieu": "Lcom/google/android/gms/internal/zzar;->zzc",
+          "origine": "bibliothèque"
+        },
+        {
+          "regle": "E1",
+          "detail": "MessageDigest.getInstance(\"MD5\")",
+          "lieu": "Lcom/google/android/gms/internal/zzbl;->zzcu",
+          "origine": "bibliothèque"
+        },
+        {
+          "regle": "E1",
+          "detail": "MessageDigest.getInstance(\"MD5\")",
+          "lieu": "Lcom/google/android/gms/internal/zzhl;->zzgn",
+          "origine": "bibliothèque"
+        },
+        {
+          "regle": "E1",
+          "detail": "MessageDigest.getInstance(\"MD5\")",
+          "lieu": "Lcom/google/android/gms/internal/zzak;->zza",
+          "origine": "bibliothèque"
+        },
+        {
+          "regle": "D1",
+          "detail": "modes ['CBC'] sans Mac dans l'appli",
+          "lieu": "(appli entière)",
+          "origine": "appli"
+        }
+      ],
+      "package": "com.android.insecurebankv2",
+      "version": "temoin",
+      "sha256": " b18af2a0e44d7634bbcdf93664d9c78a2695e050393fcfbb5e8b91f902d194a4",
+      "duree_s": 13.3
+    }
+  ],
+  "metriques": {
+    "applis_corpus": 1,
+    "non_analysables_flutter_rn": 0,
+    "analysables": 1,
+    "utilisent_crypto": 1,
+    "utilisent_crypto_dans_code_appli": 1,
+    "avec_erreur_hors_E1": 1,
+    "prevalence": 1.0,
+    "ic95_wilson": [
+      0.207,
+      1.0
+    ],
+    "avec_erreur_dans_code_appli": 1,
+    "prevalence_code_appli": 1.0,
+    "ic95_wilson_code_appli": [
+      0.207,
+      1.0
+    ],
+    "par_regle": {
+      "A1": {
+        "applis": 0,
+        "appli": 0,
+        "bibliotheque": 0
+      },
+      "A2": {
+        "applis": 0,
+        "appli": 0,
+        "bibliotheque": 0
+      },
+      "B1": {
+        "applis": 1,
+        "appli": 2,
+        "bibliotheque": 1
+      },
+      "B3": {
+        "applis": 0,
+        "appli": 0,
+        "bibliotheque": 0
+      },
+      "C1": {
+        "applis": 1,
+        "appli": 2,
+        "bibliotheque": 0
+      },
+      "C3": {
+        "applis": 0,
+        "appli": 0,
+        "bibliotheque": 0
+      },
+      "C4": {
+        "applis": 0,
+        "appli": 0,
+        "bibliotheque": 0
+      },
+      "D1": {
+        "applis": 1,
+        "appli": 1,
+        "bibliotheque": 0
+      },
+      "E1": {
+        "applis": 1,
+        "appli": 0,
+        "bibliotheque": 5
+      }
+    }
+  }
+}

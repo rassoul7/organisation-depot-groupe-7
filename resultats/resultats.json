@@ -1,0 +1,160 @@
+{
+  "meta": {
+    "date": "2026-11-13 23:57",
+    "python": "3.12.15",
+    "cryptography": "50.0.2",
+    "machine": "x86_64",
+    "processeur": "inconnu",
+    "graine": 20261111,
+    "mode": "complet"
+  },
+  "E1": [
+    {
+      "configuration": "ECB",
+      "parties": 2000,
+      "pr_gagner": 1.0,
+      "avantage": 1.0,
+      "verdict": "CASSÉ"
+    },
+    {
+      "configuration": "CBC, IV fixe",
+      "parties": 2000,
+      "pr_gagner": 1.0,
+      "avantage": 1.0,
+      "verdict": "CASSÉ"
+    },
+    {
+      "configuration": "CBC, IV prévisible (compteur)",
+      "parties": 2000,
+      "pr_gagner": 1.0,
+      "avantage": 1.0,
+      "verdict": "CASSÉ"
+    },
+    {
+      "configuration": "CBC, IV aléatoire",
+      "parties": 2000,
+      "pr_gagner": 0.5195,
+      "avantage": 0.039,
+      "verdict": "sûr (IND-CPA)"
+    },
+    {
+      "configuration": "CTR, nonce fixe",
+      "parties": 2000,
+      "pr_gagner": 1.0,
+      "avantage": 1.0,
+      "verdict": "CASSÉ"
+    },
+    {
+      "configuration": "CTR, nonce aléatoire",
+      "parties": 2000,
+      "pr_gagner": 0.4895,
+      "avantage": 0.021,
+      "verdict": "sûr (IND-CPA)"
+    },
+    {
+      "configuration": "GCM, nonce fixe",
+      "parties": 2000,
+      "pr_gagner": 1.0,
+      "avantage": 1.0,
+      "verdict": "CASSÉ"
+    },
+    {
+      "configuration": "GCM, nonce aléatoire",
+      "parties": 2000,
+      "pr_gagner": 0.5045,
+      "avantage": 0.009,
+      "verdict": "sûr (IND-CPA)"
+    },
+    {
+      "configuration": "ChaCha20-Poly1305, nonce aléatoire",
+      "parties": 2000,
+      "pr_gagner": 0.4905,
+      "avantage": 0.019,
+      "verdict": "sûr (IND-CPA)"
+    }
+  ],
+  "E2": [
+    {
+      "donnees": "journal de 2000 transactions",
+      "taille_octets": 128000,
+      "clair": 0.75,
+      "ECB": 0.75,
+      "CBC": 0.0,
+      "CTR": 0.0,
+      "GCM": 0.0
+    }
+  ],
+  "E3": [
+    {
+      "mode": "ECB",
+      "accepte": true,
+      "octets_changes": 16,
+      "blocs_touches": [
+        2
+      ],
+      "controlable": "non (bloc aléatoire)"
+    },
+    {
+      "mode": "CBC",
+      "accepte": true,
+      "octets_changes": 17,
+      "blocs_touches": [
+        2,
+        3
+      ],
+      "controlable": "oui sur le bloc suivant"
+    },
+    {
+      "mode": "CTR",
+      "accepte": true,
+      "octets_changes": 1,
+      "blocs_touches": [
+        2
+      ],
+      "controlable": "OUI, bit pour bit"
+    },
+    {
+      "mode": "GCM",
+      "accepte": false,
+      "octets_changes": 0,
+      "blocs_touches": [],
+      "controlable": "rejeté : tag invalide"
+    }
+  ],
+  "E4": {
+    "message_secret_octets": 40,
+    "blocs": 3,
+    "requetes_oracle": 5760,
+    "requetes_par_octet": 120.0,
+    "duree_s": 0.041,
+    "reussi": true,
+    "retrouve": "PIN=4821;SOLDE=1250000 XOF;TEL=771234567"
+  },
+  "E5": {
+    "CTR_m2_retrouve": true,
+    "GCM_m2_retrouve": true,
+    "remarque": "en GCM, la réutilisation permet aussi de forger des tags (Joux 2006), non implémenté ici"
+  },
+  "E6": [
+    {
+      "algorithme": "AES-128-ECB",
+      "debit_Mo_s": 565.7
+    },
+    {
+      "algorithme": "AES-128-CBC",
+      "debit_Mo_s": 406.0
+    },
+    {
+      "algorithme": "AES-128-CTR",
+      "debit_Mo_s": 979.2
+    },
+    {
+      "algorithme": "AES-128-GCM",
+      "debit_Mo_s": 926.2
+    },
+    {
+      "algorithme": "ChaCha20-Poly1305",
+      "debit_Mo_s": 581.1
+    }
+  ]
+}

@@ -1,0 +1,313 @@
+\documentclass[conference,a4paper]{IEEEtran}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{cite}
+
+\begin{document}
+
+\title{Modes AES dans les applications Android financières : étude pilote et protocole reproductible}
+
+\author{\IEEEauthorblockN{Mouhamadou Rassoul NAME, Ousmane DIALLO, Ndèye Penda NIANG}
+\IEEEauthorblockA{École Supérieure Polytechnique, Université Cheikh Anta Diop de Dakar\\
+Laboratoire LITA --- Groupe 7, DIC3 INFO + TR}}
+
+\maketitle
+
+\begin{abstract}
+Le paiement mobile est devenu central dans l'Union économique et monétaire ouest-africaine (UEMOA), mais les applications commerciales de cette région ne sont pas incluses dans cette étude. La confidentialité des données repose largement sur AES. Or AES n'est pas cassé : ce sont ses usages qui cassent la sécurité (mode ECB, vecteur d'initialisation fixe, nonce réutilisé, clé écrite dans le code, absence d'intégrité). Nous présentons un protocole méthodologique reproductible et un pilote exploratoire sur des applications Android financières open source ; la constitution et l'analyse d'un corpus UEMOA complet sont laissées comme travail futur. Nous proposons (i) une taxonomie de neuf règles en cinq familles, (ii) un banc d'essai synthétique et reproductible qui mesure l'effet de chaque erreur, y compris un jeu IND-CPA programmé, et (iii) un détecteur statique fondé sur Androguard, validé sur des applications témoins avant toute mesure. Le banc d'essai confirme que tout mode déterministe donne à l'adversaire un avantage de 1, et qu'un texte chiffré CBC sans intégrité se déchiffre sans la clé en 5\,760 requêtes. Sur 12 APK financières open source sélectionnées depuis F-Droid, 2 sont non analysables, 5 utilisent le chiffrement et aucune ne présente d'erreur hors E1 ; l'intervalle de Wilson à 95\,\% est [0\,; 43,4\,\%]. Le témoin vulnérable présente les trois erreurs attendues.
+\end{abstract}
+
+\begin{IEEEkeywords}
+AES, modes opératoires, Android, applications financières, analyse statique, étude pilote
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+Dans l'UEMOA, la BCEAO recense 248,7 millions de comptes de monnaie électronique ouverts fin 2024, dont 76,8 millions actifs, et 160\,415 milliards de FCFA de transactions dans l'année~\cite{bceao2024}. Au Sénégal, qui détient 29,7\,\% de l'encours de monnaie électronique de l'Union, un seul émetteur concentre environ 80\,\% de cet encours~\cite{cbumoa2025}. Une erreur de chiffrement dans une application largement utilisée toucherait donc des millions de personnes.
+
+AES~\cite{fips197} chiffre un bloc de 16 octets. Pour chiffrer un message, il faut un \emph{mode opératoire} (ECB, CBC, CTR, GCM)~\cite{nist38a,nist38d}, et chaque mode impose des conditions : un vecteur d'initialisation (IV) imprévisible, un nonce jamais réutilisé, une clé gardée secrète. Les études à grande échelle montrent que ces conditions sont souvent violées : Egele et al. trouvent au moins une erreur dans 88\,\% des 11\,748 applications Android utilisant des API cryptographiques~\cite{egele2013}.
+
+\textbf{Question de recherche.} Comment construire et valider un protocole reproductible de mesure des erreurs de chiffrement dans des applications Android financières, avant son application future à un corpus commercial de l'UEMOA ?
+
+\textbf{Contributions.} (1) Une taxonomie opérationnelle de neuf règles en cinq familles, avec pour chaque erreur le modèle d'attaque le plus faible qui suffit. (2) Un banc d'essai synthétique, reproductible à l'identique (graine fixe), qui mesure l'effet de chaque erreur. (3) Un détecteur statique validé sur des témoins avant mesure. (4) Un pilote de 12 APK F-Droid qui illustre la chaîne d'analyse, ses métriques et ses limites, sans prétendre estimer la prévalence dans l'UEMOA.
+
+\section{Contexte et modèle d'attaque}
+
+\textbf{Garanties des modes.} ECB chiffre chaque bloc indépendamment : deux blocs de texte en clair identiques donnent deux blocs de texte chiffré identiques, ce qui laisse voir la structure des données. CBC est sûr face à une attaque à texte en clair choisi si l'IV est aléatoire et imprévisible, mais n'assure pas l'intégrité. CTR assure la confidentialité si le nonce est unique, mais le texte chiffré est malléable bit à bit. GCM ajoute un tag d'authentification ; si un nonce est réutilisé, le XOR de deux textes chiffrés donne le XOR des textes en clair, et la clé d'authentification devient calculable~\cite{joux2006}.
+
+\textbf{Modèles d'attaque.} Nous utilisons la hiérarchie classique~\cite{paar2024} : COA (attaque à texte chiffré seulement), KPA (attaque à texte en clair connu), CPA (attaque à texte en clair choisi) et CCA (attaque à texte chiffré choisi). Pour chaque erreur, nous retenons le modèle le plus faible qui suffit (Tableau~\ref{tab:modeles}). La sécurité visée est l'indistinguabilité IND-CPA~\cite{bellare1997}.
+
+\begin{table}[t]
+\caption{Erreur et modèle d'attaque minimal}
+\label{tab:modeles}
+\centering\small
+\begin{tabular}{p{3.3cm}p{4.3cm}}
+\toprule
+Erreur & Modèle minimal suffisant \\
+\midrule
+ECB & COA (observer les textes chiffrés) \\
+Nonce réutilisé (CTR, GCM) & KPA (un texte en clair connu) \\
+IV prévisible (CBC) & CPA \\
+CBC sans intégrité & CCA (oracle de remplissage) \\
+Clé écrite dans l'APK & aucun : l'APK suffit \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Travaux connexes}
+
+Egele et al.~\cite{egele2013} (CryptoLint) établissent la fréquence des erreurs dans les applications Android, sans se limiter au paiement ni à l'Afrique de l'Ouest : leurs 88\,\% ne se transposent pas à notre pilote. Rahaman et al.~\cite{rahaman2019} (CryptoGuard) analysent 46 projets Apache et 6\,181 applications Android ; leurs raffinements réduisent les fausses alertes de 76 à 80\,\%, et 1\,277 des 1\,295 alertes Apache vérifiées sont confirmées (98,6\,\% de précision). Cette précision est mesurée sur Apache, pas sur notre échantillon open source. Muslukhov et al.~\cite{muslukhov2018} montrent que la majorité des erreurs proviennent de bibliothèques tierces, d'où notre distinction entre code de l'application et code de bibliothèque. Diallo et al.~\cite{diallo2024} étudient 59 applications bancaires de l'UEMOA et trouvent 32\,\% de modes de chiffrement non sûrs et 20\,\% de clés écrites en dur ; ce résultat constitue un point de comparaison régional, mais notre pilote n'inclut pas leurs applications. Reaves et al.~\cite{reaves2017} étudient 46 applications de mobile money, sans se centrer sur les modes AES.
+
+\textbf{Positionnement.} Notre travail ne prétend pas mesurer la fréquence des erreurs dans les applications commerciales ouest-africaines. Il fournit une chaîne méthodologique reproductible, testée sur des APK open source, qui pourra être appliquée à un corpus régional obtenu légalement. La collecte de ce corpus et la comparaison quantitative avec Egele et al., CryptoGuard et Diallo et al. constituent un travail futur.
+
+\section{Méthode}
+
+\subsection{Taxonomie}
+Nous retenons neuf règles en cinq familles (Tableau~\ref{tab:taxo}). La règle E1 (hachage faible) est informative et n'entre pas dans la prévalence.
+
+\begin{table}[t]
+\caption{Taxonomie des règles du détecteur}
+\label{tab:taxo}
+\centering\small
+\begin{tabular}{lp{5.6cm}}
+\toprule
+Règle & Motif recherché \\
+\midrule
+A1 & ECB explicite ou par défaut (\texttt{"AES"} seul) \\
+A2 & Algorithme faible (DES, 3DES, RC4, Blowfish) \\
+B1 & IV constant ou nul (\texttt{IvParameterSpec}) \\
+B3 & Nonce GCM constant (\texttt{GCMParameterSpec}) \\
+C1 & Clé écrite en dur (\texttt{SecretKeySpec}) \\
+C3 & Moins de 1\,000 itérations PBE \\
+C4 & Graine fixe (\texttt{SecureRandom.setSeed}) \\
+D1 & CBC ou CTR sans aucun MAC (suspect) \\
+E1 & MD5 ou SHA-1 (information) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Corpus et critères d'inclusion}
+Les critères sont fixés avant la collecte : application Android financière ou de portefeuille distribuée dans le dépôt F-Droid ; une seule version par application, figée à la date de collecte du 10 novembre 2026, avec son empreinte SHA-256. Les APK corrompues ou impossibles à analyser sont exclues du dénominateur et comptées à part. Ce corpus ne constitue pas un échantillon d'applications commerciales de l'UEMOA.
+
+Pour le pilote, faute d'accès automatisé aux APK commerciales, nous avons tiré 12 applications au hasard (graine fixe 20261111) parmi les 70 applications F-Droid des catégories « finance » et « portefeuille » mises à jour depuis moins de deux ans et de moins de 30~Mo. Les 12 empreintes SHA-256 ont été vérifiées.
+
+\subsection{Détecteur statique}
+Le détecteur lit le bytecode Dalvik avec Androguard~\cite{androguard}, sans exécuter l'application ni contacter de serveur. Il suit la \emph{provenance} du tableau d'octets passé comme IV, nonce ou clé : constante, tableau vide, tirage \texttt{SecureRandom}, ou donnée venue d'ailleurs. Une version interprocédurale légère suit les constantes stockées dans des champs ou passées en paramètre. Chaque constat est attribué au code de l'application ou à une bibliothèque connue.
+
+\textbf{Validation avant mesure.} L'outil a été corrigé deux fois avant toute mesure : un faux positif (IV relu depuis le stockage, signalé comme constant) a été supprimé après vérification manuelle, puis des faux négatifs ont été corrigés grâce à un témoin vulnérable (InsecureBankv2), sur lequel le détecteur trouve désormais les trois erreurs connues (B1, C1, D1).
+
+\subsection{Métriques}
+La prévalence est la part d'applications analysables utilisant le chiffrement qui présentent au moins une erreur (hors E1). Vu la petite taille des échantillons, nous donnons l'intervalle de confiance de Wilson à 95\,\%~\cite{wilson1927}. Les applications non analysables (code natif, Flutter, React Native) sont exclues du dénominateur et comptées à part. La précision de l'outil est estimée par vérification manuelle des alertes.
+
+\subsection{Banc d'essai synthétique}
+Six expériences (E1 à E6) mesurent l'effet de chaque erreur sur des données synthétiques, avec la bibliothèque \texttt{cryptography} 50.0.2 et une graine par expérience : E1--E5 donnent des résultats identiques à chaque exécution.
+
+\section{Résultats}
+
+\subsection{Banc d'essai}
+
+\textbf{E1, jeu IND-CPA.} Sur 2\,000 parties par configuration, l'avantage $|2\Pr[\text{gagner}]-1|$ vaut 1 pour toutes les configurations déterministes et proche de 0 pour les autres (Tableau~\ref{tab:e1}). Même AES : seule la gestion de l'IV ou du nonce change le verdict.
+
+\begin{table}[t]
+\caption{E1 : avantage de l'adversaire IND-CPA (2\,000 parties)}
+\label{tab:e1}
+\centering\small
+\begin{tabular}{lcc}
+\toprule
+Configuration & Avantage & Verdict \\
+\midrule
+ECB & 1,000 & cassé \\
+CBC, IV fixe & 1,000 & cassé \\
+CBC, IV prévisible (compteur) & 1,000 & cassé \\
+CBC, IV aléatoire & 0,039 & sûr \\
+CTR, nonce fixe & 1,000 & cassé \\
+CTR, nonce aléatoire & 0,021 & sûr \\
+GCM, nonce fixe & 1,000 & cassé \\
+GCM, nonce aléatoire & 0,009 & sûr \\
+ChaCha20-Poly1305, nonce aléatoire & 0,019 & sûr \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{E2, fuite d'ECB.} ECB conserve exactement la proportion de blocs répétés du texte en clair : 75,0\,\% sur un journal de 2\,000 transactions et 99,5\,\% sur une image à aplats, contre 0\,\% en CBC, CTR et GCM.
+
+\textbf{E3, intégrité.} Après modification d'un bit du texte chiffré, ECB, CBC et CTR acceptent le message ; en CTR, la modification est contrôlée bit à bit (un montant de 5\,000 devient 9\,000 sans la clé). Seul GCM rejette le message (tag invalide).
+
+\textbf{E4, oracle de remplissage.} Un message CBC de 3 blocs est entièrement déchiffré sans la clé par l'attaque de Vaudenay~\cite{vaudenay2002}, en 5\,760 requêtes (120 par octet) et 0,04~s.
+
+\textbf{E5, nonce réutilisé.} Avec un nonce répété, un second message est retrouvé sans la clé, en CTR comme en GCM.
+
+\textbf{E6, coût.} AES-128-GCM chiffre à 982~Mo/s contre 460~Mo/s pour CBC sur la même machine : le mode sûr n'est pas plus lent.
+
+\subsection{Pilote}
+Sur les 12 APK du pilote, 2 sont non analysables (Flutter), 10 sont analysables et 5 utilisent le chiffrement. Le détecteur ne trouve aucune erreur hors E1, soit une prévalence de 0\,\% avec un intervalle de Wilson à 95\,\% de [0\,; 43,4\,\%]. Ce résultat valide la chaîne d'analyse mais ne permet aucune conclusion : l'échantillon est trop petit et ne contient aucune application de mobile money.
+
+\subsection{Portée du pilote et travail futur}
+Le résultat porte uniquement sur les 12 APK F-Droid sélectionnées, et non sur les applications commerciales de paiement ou de mobile money de l'UEMOA. Les 10 APK analysables contiennent 5 applications utilisant le chiffrement ; aucune erreur hors E1 n'est détectée, soit une prévalence observée de 0\,\% et un intervalle de Wilson à 95\,\% de [0\,; 43,4\,\%]. Ce résultat est compatible avec une prévalence non nulle : la borne supérieure élevée reflète la petite taille de l'échantillon. Le témoin vulnérable confirme la détection de B1, C1 et D1, mais ne permet pas d'estimer la précision sur un corpus réel.
+
+La suite du protocole devra collecter au moins 10 APK publiques de paiement ou de mobile money utilisées dans l'UEMOA, figer leur version et leur empreinte SHA-256, puis vérifier manuellement chaque alerte. Elle pourra alors estimer la prévalence et la précision sur ce corpus distinct. Aucun résultat de cette étape future n'est rapporté ici.
+
+\section{Protocole reproductible}
+
+\subsection{Sélection et gel des données}
+La sélection du pilote est effectuée à partir de l'index public F-Droid, en retenant les catégories « finance » et « portefeuille », une taille inférieure à 30~Mo et une mise à jour récente au moment de la collecte. Une graine fixe, 20261111, est utilisée pour tirer 12 entrées parmi les candidates. Cette graine ne constitue pas une source d'aléa cryptographique : elle sert uniquement à rendre le choix du pilote répétable. Pour chaque APK, nous conservons le nom de paquet, la version, le code de version, la date de mise à jour, la taille et l'empreinte SHA-256 publiés dans l'index.
+
+Le gel par empreinte est nécessaire car une même application peut être remplacée sous une version identique ou reconstruite avec des dépendances différentes. Avant l'analyse, le fichier local est comparé à l'empreinte attendue ; une divergence invalide l'entrée et doit être signalée plutôt que corrigée silencieusement. Les APK sont conservées dans le dépôt de données afin que l'expérience puisse être rejouée avec exactement les mêmes artefacts. Leur présence ne signifie pas que le pilote est représentatif : elle garantit seulement la traçabilité de la mesure.
+
+\subsection{Chaîne d'analyse}
+La chaîne comporte quatre étapes. Premièrement, Androguard ouvre l'APK et extrait les classes DEX sans installer ni lancer l'application. Deuxièmement, le détecteur parcourt les instructions Dalvik et suit une provenance limitée des registres : tableau constant, tableau vide, valeur aléatoire, chaîne littérale ou donnée d'origine inconnue. Troisièmement, une passe interprocédurale légère suit les constantes transmises comme paramètres et stockées dans des champs. Enfin, les constats sont dédoublonnés et agrégés par règle, application et origine.
+
+Cette architecture est volontairement plus simple qu'une analyse complète de flot de données. Elle rend les règles lisibles et auditables, mais elle ne prétend pas résoudre les alias, la réflexion, le code natif ou les valeurs dépendant de l'exécution. Le rapport JSON conserve le détail du constat, la méthode concernée et l'origine estimée. Le rapport Markdown facilite la vérification humaine et la préparation des tableaux de l'article.
+
+\subsection{Définition opérationnelle de l'erreur}
+Une application est comptée comme présentant une erreur si elle est analysable, utilise effectivement une API de chiffrement dans son code applicatif et possède au moins un constat A1, A2, B1, B3, C1, C3, C4 ou D1. E1 est conservée comme information, mais exclue de la prévalence car MD5 ou SHA-1 peuvent être utilisés pour des fonctions non cryptographiques et ne prouvent pas à eux seuls une erreur de chiffrement.
+
+Les appels observés uniquement dans une bibliothèque sont comptés séparément. Cette distinction évite d'attribuer automatiquement à l'application une faiblesse provenant d'un composant tiers ; elle ne constitue toutefois pas une preuve d'innocuité, car l'application peut dépendre de cette bibliothèque. D1 est également une règle prudente : l'absence de MAC dans le bytecode analysé est un signal, pas la preuve que le protocole global n'assure aucune intégrité.
+
+\subsection{Calcul statistique}
+Pour $k$ applications en erreur parmi $n$ applications utilisant le chiffrement, la prévalence observée est $\hat p=k/n$. Nous utilisons l'intervalle de Wilson à 95\,\% plutôt qu'une approximation normale, car $n$ est petit et $k=0$ dans le pilote. Pour le pilote, $k=0$ et $n=5$, donc $\hat p=0$ et la borne supérieure arrondie est 43,4\,\%. L'intervalle ne doit pas être interprété comme une estimation régionale : il quantifie seulement l'incertitude d'un échantillon exploratoire dont la sélection et la population cible diffèrent de celles des études antérieures.
+
+\section{Validation et contrôle qualité}
+
+\subsection{Témoin positif}
+Le témoin InsecureBankv2 est utilisé avant l'interprétation du pilote. Le détecteur retrouve une IV constante (B1), une clé codée en dur (C1) et un mode CBC sans MAC détecté comme suspect (D1) dans le code applicatif. Les occurrences MD5, SHA-1 et IV constantes dans des bibliothèques sont enregistrées séparément. Ce test ne mesure pas la précision statistique : il vérifie que la chaîne sait retrouver des motifs connus dans un exemple volontairement vulnérable.
+
+\subsection{Vérification manuelle}
+La vérification manuelle suit une fiche en quatre questions : le constat est-il dans le code applicatif ou dans une dépendance ; la valeur signalée est-elle réellement constante ; la construction est-elle utilisée comme IV, nonce ou clé ; et le motif suffit-il à conclure à une erreur selon la taxonomie ? Une alerte qui ne répond pas à ces critères est classée comme faux positif de la règle et doit conduire à corriger le détecteur avant la mesure principale. Une absence d'alerte n'est pas considérée comme une preuve de sécurité, car l'analyse statique ne couvre pas toutes les voies d'exécution.
+
+\subsection{Reproductibilité logicielle}
+Le script \texttt{code/reproduire.sh} exécute les expériences synthétiques, le détecteur sur le pilote et le détecteur sur le témoin. Les expériences E1--E5 utilisent la graine 20261111 ; E6 est une mesure de débit et peut varier selon la machine. Les versions Python, \texttt{cryptography} et Androguard sont consignées dans l'article. Les sorties JSON sont les résultats structurés et les sorties Markdown sont destinées à l'inspection.
+
+Une reproduction réussie doit vérifier simultanément les propriétés suivantes : les configurations déterministes d'E1 obtiennent un avantage égal à 1 ; ECB conserve les répétitions d'E2 ; GCM rejette la modification d'E3 ; l'oracle synthétique E4 retrouve le message ; le nonce réutilisé compromet la confidentialité en E5 ; le pilote possède 12 entrées et les métriques 2/10/5/0 ; enfin le témoin produit B1, C1 et D1. Ces invariants sont plus robustes que la comparaison des temps d'exécution ou des chemins absolus.
+
+\section{Plan d'extension au corpus UEMOA}
+
+Le protocole futur devra distinguer clairement trois populations : applications bancaires, applications de mobile money et applications de portefeuille ou de paiement. Pour chaque APK, la fiche de collecte devra comporter un identifiant anonyme, le pays ou les pays d'usage, la source publique, la date de téléchargement, la version, le code de version, la taille et le SHA-256. Les noms d'applications ne devront pas apparaître dans les tableaux de résultats publiés lorsqu'une vulnérabilité est confirmée.
+
+La collecte devra être limitée aux fichiers dont la redistribution et l'analyse sont autorisées. Les applications propriétaires distribuées uniquement par une boutique officielle pourront être analysées localement si les conditions applicables le permettent, mais leur APK ne devra pas être ajouté au dépôt si sa redistribution est interdite. Dans ce cas, l'article devra conserver au minimum les métadonnées vérifiables et documenter la procédure d'obtention. Les applications Flutter, React Native, natives ou protégées par obfuscation devront être comptées séparément, avec la raison de l'exclusion.
+
+Après analyse, chaque alerte devra être revue par au moins un membre du groupe et, pour les alertes retenues, confirmée par un second examen. La prévalence devra être rapportée séparément pour toutes les applications analysables utilisant le chiffrement et pour le sous-ensemble où l'appel se trouve dans le code applicatif. La comparaison avec Egele et al., CryptoGuard et Diallo et al. devra préciser les populations, les unités de comptage, les règles et les dénominateurs ; des pourcentages issus de populations différentes ne devront pas être présentés comme une évolution temporelle.
+
+\section{Discussion du modèle de sécurité}
+
+\subsection{Confidentialité et intégrité}
+Les expériences distinguent deux propriétés souvent confondues dans les applications. La confidentialité demande qu'un observateur ne puisse pas apprendre le texte en clair au-delà de ce que les longueurs et les métadonnées révèlent. L'intégrité demande qu'un destinataire puisse détecter une modification du texte chiffré. ECB échoue déjà sur la confidentialité structurelle. CBC avec IV aléatoire peut fournir une confidentialité adaptée à certains modèles, mais il n'assure pas l'intégrité. CTR fournit une confidentialité si le nonce est unique, mais sa malléabilité rend une modification contrôlée possible. GCM combine chiffrement et authentification, sous la condition critique d'un nonce jamais réutilisé avec une même clé.
+
+Cette distinction explique pourquoi le détecteur ne réduit pas toutes les règles à un seul indicateur. A1 et B1 signalent des risques de déterminisme ; B3 et C4 concernent la génération ou la réutilisation de paramètres ; C1 concerne la protection de la clé ; D1 attire l'attention sur l'absence apparente d'une authentification ; E1 fournit un indicateur cryptographique plus général. Une application peut donc avoir plusieurs constats indépendants, ou une alerte informative sans erreur de mode.
+
+\subsection{Modèles d'attaque}
+Le banc d'essai utilise quatre modèles pédagogiques. En COA, Kiné observe uniquement des textes chiffrés et peut exploiter les répétitions d'ECB. En KPA, elle connaît un texte en clair et son texte chiffré, ce qui suffit à exploiter une réutilisation de nonce dans CTR ou GCM. En CPA, elle choisit des textes en clair et observe leurs chiffrés ; un IV CBC prévisible compromet alors la sécurité attendue. En CCA, Modou soumet des textes chiffrés modifiés à un déchiffreur qui révèle une réponse ; l'oracle de remplissage CBC illustre ce cas.
+
+Ces modèles ne décrivent pas une attaque contre une application réelle. Ils servent à relier chaque mauvaise configuration à une garantie qui disparaît. Les messages, clés, nonces et réponses de l'oracle sont générés par les scripts du dépôt et ne proviennent d'aucun compte, serveur ou utilisateur.
+
+\subsection{Limites des conclusions}
+Une absence de constat n'est pas équivalente à une preuve de sécurité. Le détecteur peut manquer une valeur construite par concaténation, une clé issue d'une réponse réseau, une réutilisation dynamique d'un nonce ou une primitive appelée via réflexion. À l'inverse, D1 peut alerter lorsqu'une intégrité est assurée à un autre niveau du protocole. Les résultats doivent donc être formulés comme « aucune alerte retenue par les règles étudiées » et non comme « l'application est sûre ».
+
+La limite statistique est également importante. Le dénominateur de 5 applications utilisant le chiffrement est défini après l'analyse ; il est différent du nombre total d'APK et du nombre d'applications analysables. Nous rapportons les trois nombres pour éviter une interprétation ambiguë. La borne supérieure de Wilson de 43,4\,\% montre qu'un résultat nul sur un petit pilote ne permet pas d'exclure une fréquence substantielle dans une population différente.
+
+\section{Résultats détaillés du pilote}
+
+\subsection{Répartition des observations}
+Le tableau~\ref{tab:pilote-detail} résume les étapes de filtrage et les dénominateurs. Les deux APK Flutter sont comptées dans le corpus, mais exclues de l'analyse du bytecode Java/Kotlin par la règle de couverture définie avant la mesure. Parmi les dix APK analysables, cinq utilisent une API de chiffrement dans le code observé. Les cinq autres ne sont pas interprétées comme « sans erreur » : elles ne contribuent pas au dénominateur de la prévalence.
+
+\begin{table}[t]
+\caption{Dénominateurs du pilote F-Droid}
+\label{tab:pilote-detail}
+\centering\small
+\begin{tabular}{lr}
+\toprule
+Étape & Nombre \\
+\midrule
+APK sélectionnées & 12 \\
+Non analysables (Flutter/RN) & 2 \\
+APK analysables & 10 \\
+Utilisent une API de chiffrement & 5 \\
+Utilisent le chiffrement dans le code applicatif & 2 \\
+Avec une erreur hors E1 & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+La différence entre les cinq applications utilisant une API et les deux utilisant une API dans le code applicatif vient notamment des appels observés dans des dépendances ou des composants dont l'origine est distincte. Cette séparation est conservée dans le JSON afin de permettre une analyse ultérieure par origine. Elle évite également de présenter la présence d'une bibliothèque cryptographique comme une preuve d'usage vulnérable par le code de l'application.
+
+\subsection{Règles et interprétation}
+Les neuf règles sont regroupées en cinq familles : choix de primitive ou de mode (A1--A2), paramètres d'initialisation (B1--B3), gestion des clés et du hasard (C1, C3, C4), intégrité applicative (D1) et hachage informatif (E1). Dans le pilote, aucune règle A1, A2, B1, B3, C1, C3, C4 ou D1 n'est retenue dans le dénominateur des cinq applications utilisant le chiffrement. E1 ne contribue pas à la prévalence.
+
+Le résultat est différent du résultat du témoin : InsecureBankv2 déclenche B1, C1 et D1 dans son code applicatif. Cette différence est attendue, puisque le témoin est construit pour contenir les motifs étudiés. Elle fournit un contrôle de sensibilité minimal, mais ne permet pas d'estimer le taux de faux positifs, qui nécessiterait un corpus suffisamment documenté avec des labels indépendants.
+
+\subsection{Comparaison prudente avec les travaux connexes}
+Les 88\,\% d'Egele et al. concernent 11\,748 applications Android utilisant des API cryptographiques, tandis que le pilote comprend seulement cinq applications dans son dénominateur et provient d'une sélection F-Droid. Les 98,6\,\% de précision rapportés par CryptoGuard sont mesurés sur des alertes Apache vérifiées, avec une méthode et une population différentes. Les 32\,\% de Diallo et al. concernent des modes non sûrs dans 59 applications bancaires de l'UEMOA, et non le pilote F-Droid. Ces chiffres sont donc des repères méthodologiques et contextuels, pas des valeurs à agréger avec nos 0/5.
+
+\section{Guide de lecture et conditions de réplication}
+
+\subsection{Taxonomie opérationnelle}
+Le tableau~\ref{tab:taxonomie-detaillee} précise le lien entre le motif statique, le risque et le contrôle à effectuer. Cette description est importante pour éviter qu'un nom de classe ou une transformation cryptographique ne soit interprété isolément. Par exemple, la présence de CBC n'est pas une erreur en soi ; le contexte de l'IV et l'existence éventuelle d'une authentification déterminent la nature du signal.
+
+\begin{table*}[t]
+\caption{Règles, indices statiques et vérifications humaines}
+\label{tab:taxonomie-detaillee}
+\centering\small
+\begin{tabular}{p{0.7cm}p{3.1cm}p{4.2cm}p{5.0cm}}
+\toprule
+Règle & Famille & Indice détecté & Vérification humaine \\
+\midrule
+A1 & Mode déterministe & AES sans transformation explicite ou AES/ECB & Vérifier que l'appel chiffre effectivement des données applicatives et non un artefact de bibliothèque. \\
+A2 & Primitive faible & DES, 3DES, RC4, Blowfish ou RC2 & Vérifier l'usage, la fonction et l'existence d'une contrainte de compatibilité documentée. \\
+B1 & IV constant & IvParameterSpec alimenté par une constante ou un tableau vide & Vérifier la provenance du tableau et distinguer un IV constant d'une valeur récupérée dynamiquement. \\
+B3 & Nonce GCM constant & GCMParameterSpec alimenté par une constante & Vérifier l'unicité réelle du nonce et la clé associée. \\
+C1 & Clé codée en dur & SecretKeySpec alimenté par une constante & Vérifier que la constante est une clé de production et non une donnée de test. \\
+C3 & Dérivation faible & PBE avec moins de 1\,000 itérations & Vérifier l'algorithme, le sel, la taille de clé et le contexte historique. \\
+C4 & Hasard mal initialisé & SecureRandom.setSeed avec une valeur fixe & Vérifier si l'appel remplace ou complète l'entropie système. \\
+D1 & Intégrité suspecte & CBC ou CTR sans appel MAC dans le code applicatif & Chercher une authentification hors du périmètre analysé et qualifier le constat comme suspect. \\
+E1 & Hachage faible & MD5 ou SHA-1 & Identifier la fonction réelle : mot de passe, signature, identifiant ou compatibilité. \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Procédure d'exécution}
+Une réplication commence par une copie propre du dépôt et l'installation des dépendances indiquées par le groupe. Le script est lancé depuis la racine afin que les chemins relatifs soient les mêmes pour tous les membres. Les sorties précédentes ne doivent pas être utilisées comme entrée de l'analyse : elles sont remplacées par les nouveaux résultats. La date, la version de Python et la machine peuvent être ajoutées au rapport d'exécution, mais les temps E6 ne doivent pas être utilisés comme critère de réussite.
+
+La première vérification porte sur les expériences synthétiques. Le programme doit afficher les neuf configurations E1 et produire les fichiers JSON et Markdown du banc. La deuxième porte sur les 12 lignes du CSV et les 12 APK correspondantes. Le nombre d'entrées, les empreintes et le cadre d'analyse doivent être comparés au résultat de référence. La troisième porte sur le témoin ; les règles B1, C1 et D1 doivent apparaître dans l'origine « appli ». Une divergence doit être examinée avant toute modification des chiffres de l'article.
+
+\subsection{Traçabilité des versions}
+Le code du détecteur comporte une version interne. Toute correction de règle doit augmenter cette version et régénérer les résultats du pilote et du témoin. Une modification de la définition de l'origine, du dénominateur ou de l'exclusion des applications non analysables doit être signalée dans l'article. Les résultats ne doivent pas être remplacés manuellement dans les fichiers JSON.
+
+Pour une future collecte UEMOA, chaque ligne du CSV devra être stable et anonymisée. Le nom de paquet peut rester dans un fichier privé de travail si nécessaire pour retrouver la source, mais les tableaux et figures publiés utiliseront uniquement `APK-01`, `APK-02`, etc. Les empreintes SHA-256 peuvent être publiées sans révéler de clé privée ; aucune clé, jeton ou donnée d'authentification ne doit entrer dans le dépôt.
+
+\subsection{Critères d'arrêt}
+L'analyse s'arrête pour une APK lorsque l'APK est corrompue, lorsque son empreinte ne correspond pas à la fiche, lorsque le format ne peut pas être ouvert par l'outil ou lorsque le code est hors couverture déclarée. Dans chacun de ces cas, l'entrée reste comptée dans le corpus collecté et reçoit une raison d'exclusion. Il est interdit de la supprimer silencieusement, car cela modifierait le dénominateur et introduirait un biais de sélection.
+
+\section{Discussion et limites}
+
+\textbf{Analyse statique seulement.} Le détecteur ne voit pas les valeurs construites à l'exécution : un nonce réutilisé parce qu'un compteur est remis à zéro échappe à l'analyse, seul un nonce \emph{constant} est détecté (règle B3).
+
+\textbf{Couverture.} Le code natif et les applications Flutter ou React Native ne sont pas analysés ; elles sont comptées à part, ce qui peut réduire fortement la part analysable du corpus. Le résultat porte donc sur les applications analysables, et nous le présentons comme tel.
+
+\textbf{Alerte et faille.} Une alerte est un indice à vérifier, pas la preuve d'une faille exploitable. La règle D1 est seulement « suspecte » : l'intégrité peut être assurée côté serveur ou par TLS, ce que l'analyse de l'APK ne voit pas.
+
+\textbf{Applications sans chiffrement propre.} Une application qui confie toute la sécurité à TLS n'utilise pas d'API de chiffrement : elle sort du dénominateur au lieu d'être comptée « sans erreur ».
+
+\textbf{Représentativité.} Le pilote est open source, de petite taille et composé d'applications financières génériques ; il ne représente ni les applications commerciales de l'UEMOA, ni les applications de mobile money. La sélection F-Droid peut aussi favoriser des projets dont le code et les dépendances sont différents de ceux des applications propriétaires. Toute extrapolation aux 88\,\% d'Egele et al., aux résultats de CryptoGuard ou aux 32\,\% de Diallo et al. serait donc abusive. Le corpus UEMOA complet reste à constituer et à analyser dans un travail futur.
+
+\section{Éthique}
+Nous menons une analyse statique uniquement : aucune exécution d'application, aucun contact avec un serveur, aucune attaque sur un système réel. Toute vulnérabilité trouvée est signalée en privé à l'éditeur avant publication, et aucun nom d'application vulnérable n'est publié : seuls des résultats agrégés et des identifiants anonymisés apparaissent. Les expériences d'attaque du banc d'essai portent uniquement sur des données synthétiques.
+
+\section{Conclusion}
+AES n'est pas cassé : le banc d'essai montre que chaque erreur d'usage (mode déterministe, IV fixe ou prévisible, nonce réutilisé, absence d'intégrité) suffit à perdre la confidentialité ou l'intégrité, et que le mode sûr ne coûte rien en débit. Dans le pilote F-Droid, aucune erreur hors E1 n'est observée parmi les 5 applications utilisant le chiffrement, mais la taille et la composition du corpus interdisent toute généralisation aux applications commerciales ouest-africaines. Ce résultat méthodologique fournit une chaîne reproductible pour le futur corpus UEMOA ; sa prévalence et sa précision restent à mesurer. Recommandation : AES-GCM ou ChaCha20-Poly1305, un nonce jamais réutilisé, et une clé gardée hors du code (Android Keystore).
+
+\section*{Reproductibilité}
+Le code, les données et les résultats sont dans le dépôt du groupe ; toutes les figures et tables sont régénérées par \texttt{bash code/reproduire.sh}. Graine fixe 20261111 ; versions : Python 3.12, \texttt{cryptography} 50.0.2, Androguard pour l'analyse statique.
+
+\section*{Déclaration d'usage de l'IA}
+Ce travail a été préparé avec l'aide d'un outil d'IA générative (Claude, Anthropic) pour la relecture, l'aide à la rédaction et l'écriture de scripts. Les auteurs ont vérifié toutes les valeurs, exécuté toutes les expériences et restent responsables du contenu.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
